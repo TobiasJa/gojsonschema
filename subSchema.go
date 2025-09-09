@@ -27,9 +27,10 @@
 package gojsonschema
 
 import (
-	"github.com/xeipuuv/gojsonreference"
 	"math/big"
 	"regexp"
+
+	"github.com/xeipuuv/gojsonreference"
 )
 
 // Constants
@@ -44,6 +45,7 @@ const (
 	KEY_ITEMS                 = "items"
 	KEY_ADDITIONAL_ITEMS      = "additionalItems"
 	KEY_PROPERTIES            = "properties"
+	KEY_EXAMPLE               = "example"
 	KEY_PATTERN_PROPERTIES    = "patternProperties"
 	KEY_ADDITIONAL_PROPERTIES = "additionalProperties"
 	KEY_PROPERTY_NAMES        = "propertyNames"
@@ -125,6 +127,8 @@ type subSchema struct {
 	additionalProperties interface{}
 	patternProperties    map[string]*subSchema
 	propertyNames        *subSchema
+
+	example interface{}
 
 	// validation : array
 	minItems    *int

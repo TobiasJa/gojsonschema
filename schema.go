@@ -27,7 +27,9 @@
 package gojsonschema
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"reflect"
 	"regexp"
@@ -73,7 +75,6 @@ func (d *Schema) SetRootSchemaName(name string) {
 // Pretty long function ( sorry :) )... but pretty straight forward, repetitive and boring
 // Not much magic involved here, most of the job is to validate the key names and their values,
 // then the values are copied into subSchema struct
-//
 func (d *Schema) parseSchema(documentNode interface{}, currentSchema *subSchema) error {
 
 	if currentSchema.draft == nil {
@@ -211,6 +212,38 @@ func (d *Schema) parseSchema(documentNode interface{}, currentSchema *subSchema)
 	}
 	if k, ok := m[KEY_DESCRIPTION].(string); ok {
 		currentSchema.description = &k
+	}
+
+	// example
+	if existsMapKey(m, KEY_EXAMPLE) {
+		if isKind(m[KEY_EXAMPLE], reflect.String) {
+			if k, ok := m[KEY_EXAMPLE].(string); ok {
+				currentSchema.example = k
+			}
+		} else if isKind(m[KEY_EXAMPLE], reflect.Bool) {
+			currentSchema.example = m[KEY_EXAMPLE].(bool)
+		} else if reflect.TypeOf(m[KEY_EXAMPLE]).Name() == "Number" {
+			integer, err := m[KEY_EXAMPLE].(json.Number).Int64()
+			if err != nil {
+				fmt.Printf("Unknown type for %s: %T\n", KEY_EXAMPLE, m[KEY_EXAMPLE])
+			} else {
+				currentSchema.example = integer
+			}
+		} else if isKind(m[KEY_EXAMPLE], reflect.Int64) {
+			currentSchema.example = m[KEY_EXAMPLE].(int64)
+		} else if isKind(m[KEY_EXAMPLE], reflect.Float32) {
+			currentSchema.example = m[KEY_EXAMPLE].(float32)
+		} else if isKind(m[KEY_EXAMPLE], reflect.Float64) {
+			currentSchema.example = m[KEY_EXAMPLE].(float64)
+		} else if isKind(m[KEY_EXAMPLE], reflect.Slice) {
+			arrayOfExamples := m[KEY_EXAMPLE].([]interface{})
+			currentSchema.example = arrayOfExamples
+		} else if isKind(m[KEY_EXAMPLE], reflect.Map) {
+			currentSchema.example = m[KEY_EXAMPLE].(map[string]interface{})
+		} else {
+			fmt.Println(reflect.TypeOf(m[KEY_EXAMPLE]).Name())
+			fmt.Printf("Unknown type for %s: %T\n", KEY_EXAMPLE, m[KEY_EXAMPLE])
+		}
 	}
 
 	// $ref
@@ -1084,4 +1117,70 @@ func (d *Schema) parseDependencies(documentNode interface{}, currentSchema *subS
 	}
 
 	return nil
+}
+
+func (d *Schema) GenerateExampleJson() (*string, error) {
+	if d.rootSchema == nil {
+		return nil, errors.New("Schema not loaded")
+	}
+	jsonMap, err := d.generateExampleJsonForSchema(d.rootSchema)
+	if err != nil {
+		return nil, err
+	}
+	jsonString, err := json.Marshal(jsonMap)
+	if err != nil {
+		return nil, err
+	}
+	result := string(jsonString)
+	return &result, nil
+}
+
+func (d *Schema) generateExampleJsonForSchema(currentSchema *subSchema) (any, error) {
+	if currentSchema == nil {
+		return nil, nil
+	}
+	if currentSchema.example != nil {
+		return currentSchema.example, nil
+	}
+	if currentSchema.refSchema != nil {
+		value, err := d.generateExampleJsonForSchema(currentSchema.refSchema)
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	if len(currentSchema.propertiesChildren) > 0 {
+		jsonMap := make(map[string]any)
+		for _, child := range currentSchema.propertiesChildren {
+			value, err := d.generateExampleJsonForSchema(child)
+			if err != nil {
+				continue
+			}
+			jsonMap[child.property] = value
+		}
+		return jsonMap, nil
+	}
+	if len(currentSchema.itemsChildren) > 0 {
+		jsonList := []any{}
+		for _, child := range currentSchema.itemsChildren {
+			value, err := d.generateExampleJsonForSchema(child)
+			if err != nil {
+				continue
+			}
+			jsonList = append(jsonList, value)
+		}
+		return jsonList, nil
+	}
+	if len(currentSchema.oneOf) > 0 {
+		value, err := d.generateExampleJsonForSchema(currentSchema.oneOf[0])
+		if err != nil {
+			return nil, err
+		}
+		return value, nil
+	}
+	if len(currentSchema.allOf) > 0 {
+		fmt.Println("allOf example generation not implemented")
+		return nil, nil
+	}
+	return nil, nil
 }

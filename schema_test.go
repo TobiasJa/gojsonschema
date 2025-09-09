@@ -380,3 +380,136 @@ func TestIncorrectRef(t *testing.T) {
 	assert.Nil(t, s)
 	assert.Equal(t, "Object has no key 'fail'", err.Error())
 }
+
+func TestExampleGeneration(t *testing.T) {
+	schema := `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+	"name": {
+	  "type": "string",
+	  "example": "John Doe"
+	}
+  }
+}`
+
+	loader := NewBytesLoader([]byte(schema))
+	s, err := NewSchema(loader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	json, err := s.GenerateExampleJson()
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	expected := `{"name":"John Doe"}`
+
+	if *json != expected {
+		t.Errorf("Expected '%s' but got '%s'", expected, *json)
+	}
+}
+
+func TestExampleGenerationReference(t *testing.T) {
+	schema := `{
+  "$ref": "definitions#/Name"
+}`
+	schemaDefinitions := `{
+  "$id": "definitions",
+  "Name": {
+    "type": "string",
+    "example": "John Doe"
+  }
+}`
+
+	schemaLoader := NewBytesLoader([]byte(schema))
+	definitionsLoader := NewBytesLoader([]byte(schemaDefinitions))
+	sl := NewSchemaLoader()
+	err := sl.AddSchemas(definitionsLoader)
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+	s, err := sl.Compile(schemaLoader)
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	json, err := s.GenerateExampleJson()
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	expected := `"John Doe"`
+
+	if *json != expected {
+		t.Errorf("Expected '%s' but got '%s'", expected, *json)
+	}
+}
+
+func TestExampleGenerationMixed(t *testing.T) {
+	schema := `{
+  "$ref": "definitions#/FirstObject"
+}`
+	schemaDefinitions := `{
+  "$id": "definitions",
+  "FirstObject": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "example": "John Doe"
+      },
+      "object2": {
+        "$ref": "#/SecondObject"
+      }
+    }
+  },
+  "SecondObject": {
+    "type": "object",
+    "properties": {
+      "value1": {
+        "type": "string",
+        "example": "Some Value"
+      },
+      "value2": {
+        "type": "number",
+        "example": 15
+      },
+      "value3": {
+        "type": "array",
+        "items": {
+          "$ref": "#/ArrayObject"
+        }
+      }
+    }
+  },
+  "ArrayObject": {
+    "type": "string",
+    "example": "Array Value"
+  }
+}`
+
+	schemaLoader := NewBytesLoader([]byte(schema))
+	definitionsLoader := NewBytesLoader([]byte(schemaDefinitions))
+	sl := NewSchemaLoader()
+	err := sl.AddSchemas(definitionsLoader)
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+	s, err := sl.Compile(schemaLoader)
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	json, err := s.GenerateExampleJson()
+	if err != nil {
+		t.Errorf("Got error: %s", err.Error())
+	}
+
+	expected := `{"name":"John Doe","object2":{"value1":"Some Value","value2":15,"value3":["Array Value"]}}`
+
+	if *json != expected {
+		t.Errorf("Expected '%s' but got '%s'", expected, *json)
+	}
+}
